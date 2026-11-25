@@ -118,19 +118,20 @@ async function clearCookies(snapshot, selector, context) {
   const excluded = cookie => protectedSharedCookie(cookie, selector.exclude, context) ||
     selector.exclude.some(token => matchToken(token, eligible(cookie), context, "clearCookies"));
   if (isComplement(selector) && !cookies.some(excluded)) return 0;
+  const selected = cookie => !excluded(cookie) && matches(selector, eligible(cookie), context, "clearCookies");
 
   let removed = 0;
-  for (const cookie of cookies) {
-    if (excluded(cookie) || !matches(selector, eligible(cookie), context, "clearCookies")) continue;
-    if (await deleteCookie(snapshot, cookie)) removed++;
+  for (const cookie of cookies.filter(selected)) {
+    removed += await deleteCookie(snapshot, cookie, selected);
   }
   return removed;
 }
 
-async function deleteCookie(snapshot, cookie) {
+async function deleteCookie(snapshot, cookie, selected) {
   const host = normalizeHost(cookie.domain);
   const cookies = snapshot.api.cookies;
   const schemes = cookie.secure ? ["https"] : ["https", "http"];
+  const targetKey = cookieKey(cookie);
   for (const scheme of schemes) {
     const url = new URL(scheme + "://" + host);
     url.pathname = cookie.path;
@@ -138,18 +139,23 @@ async function deleteCookie(snapshot, cookie) {
     if (cookie.partitionKey) details.partitionKey = cookie.partitionKey;
 
     if (!await snapshot.api.permissions.contains({ origins: [url.origin + "/*"] })) continue;
-    const before = await cookies.getAll(details);
-    const targetKey = cookieKey(cookie);
-    if (!before.some(item => cookieKey(item) === targetKey)) continue;
-    if (before.some(item => cookieKey(item) !== targetKey)) {
-      throw new ChromeCleanError("AMBIGUOUS_COOKIE", "Chrome cannot remove a cookie without also targeting another cookie with the same name and matching path.");
+    let remaining = await cookies.getAll(details);
+    let removed = 0;
+    while (remaining.some(item => cookieKey(item) === targetKey)) {
+      if (remaining.some(item => !selected(item))) {
+        throw new ChromeCleanError("AMBIGUOUS_COOKIE", "Chrome cannot remove a cookie without also targeting a cookie outside the selected scope.");
+      }
+
+      await cookies.remove(details);
+      const after = await cookies.getAll(details);
+      const count = remaining.length - after.length;
+      if (count <= 0) {
+        throw new ChromeCleanError("COOKIE_REMAINED", "A targeted cookie remained after removal.");
+      }
+      removed += count;
+      remaining = after;
     }
-    await cookies.remove(details);
-    const after = await cookies.getAll(details);
-    if (after.some(item => cookieKey(item) === targetKey)) {
-      throw new ChromeCleanError("COOKIE_REMAINED", "A targeted cookie remained after removal.");
-    }
-    return true;
+    if (removed > 0) return removed;
   }
-  return false;
+  return 0;
 }

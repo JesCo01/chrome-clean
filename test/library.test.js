@@ -49,7 +49,8 @@ function mockChrome({
       getAll: async details => currentCookies.filter(item => cookieMatches(item, details)),
       remove: async details => {
         calls.push(["cookie", details]);
-        currentCookies = currentCookies.filter(item => !cookieMatches(item, details));
+        const index = currentCookies.findIndex(item => cookieMatches(item, details));
+        if (index !== -1) currentCookies.splice(index, 1);
       }
     },
     tabs: {
@@ -160,6 +161,27 @@ test("ambiguous cookie removal is rejected before calling Chrome's remove", asyn
   });
   await assert.rejects(cleaner.clearCookies("app.example.com"), { code: "AMBIGUOUS_COOKIE" });
   assert.deepEqual(calls, []);
+});
+
+test("cookies that match the same URL can be removed when all are selected", async () => {
+  const { api, cleaner, calls, getCookies } = mockChrome({
+    cookies: [cookie(".movistar.com.ar"), cookie("idp.movistar.com.ar"), cookie("other.test")]
+  });
+  const getAll = api.cookies.getAll;
+  api.cookies.getAll = async details => {
+    const matches = await getAll(details);
+    return details.url ? matches : matches.toReversed();
+  };
+
+  assert.deepEqual(await cleaner.run([
+    ["closeWindows", "movistar.com.ar"], ["clearCookies", "movistar.com.ar"]
+  ]), [
+    { op: "closeWindows", result: 0 }, { op: "clearCookies", result: 2 }
+  ]);
+  assert.deepEqual(calls.map(([, details]) => details.url), [
+    "https://idp.movistar.com.ar/", "https://idp.movistar.com.ar/"
+  ]);
+  assert.deepEqual(getCookies(), [cookie("other.test")]);
 });
 
 test("partitioned cookies discovered from a tab use their own partition key", async () => {
