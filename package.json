@@ -1,0 +1,22 @@
+{
+  "name": "chrome-clean",
+  "version": "0.1.0",
+  "description": "Selective browser cleanup for Chrome Manifest V3 extensions",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./src/index.js",
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "files": ["src/", "types/", "README.md", "SPEC.md"],
+  "scripts": {
+    "test": "node --test",
+    "example": "node scripts/build-example.js"
+  },
+  "engines": { "node": ">=22" },
+  "keywords": ["chrome-extension", "manifest-v3", "browsing-data", "cookies"]
+}

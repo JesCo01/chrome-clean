@@ -1,0 +1,10 @@
+{
+  "name": "chrome-clean example",
+  "description": "Clear HTTP cache for one explicitly chosen web origin.",
+  "version": "0.1.0",
+  "manifest_version": 3,
+  "minimum_chrome_version": "96",
+  "incognito": "not_allowed",
+  "permissions": ["browsingData"],
+  "action": { "default_popup": "popup.html" }
+}
